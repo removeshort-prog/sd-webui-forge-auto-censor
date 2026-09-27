@@ -116,7 +116,7 @@ def execute(values, session, first_only, progress):
                 shared.state.interrupted = False
                 shared.state.skipped = False
                 shared.state.stopping_generation = False
-        downloads = ([str(result.archive)] if result.archive else []) + [str(result.report)]
+        downloads = [str(result.archive)] if result.archive else []
         downloads.extend(str(path) for path in result.outputs[:100])
         return result.previews, downloads, summary_html(result), str(result.directory)
     except Exception as exc:
@@ -166,9 +166,10 @@ def create_ui():
                 output_dir = gr.Textbox(
                     label="输出文件夹（留空使用 Forge/outputs/auto-censor）", visible=allow_dirs)
                 with gr.Row():
-                    make_zip = gr.Checkbox(label="生成 ZIP 和 CSV 报告", value=True)
+                    make_zip = gr.Checkbox(label="生成 ZIP 下载包", value=True)
                     max_megapixels = gr.Slider(1, 256, value=64, step=1, label="单张像素上限（百万像素）")
                 gr.Markdown("首次使用请先安装 `requirements-censor.txt`；模型首次运行可能联网下载。")
+                gr.Markdown("输出按日期归档到当天文件夹，ZIP 只包含本次处理的图片。")
             with gr.Column(scale=6):
                 with gr.Row():
                     start = gr.Button("开始自动打码", variant="primary")
@@ -177,7 +178,7 @@ def create_ui():
                     open_folder = gr.Button("📂 打开输出文件夹", visible=allow_dirs)
                 gallery = gr.Gallery(label="打码结果预览（最多 20 张）", columns=2, height=520,
                                      elem_id="fac-gallery")
-                downloads = gr.File(label="下载 ZIP / 报告 / 图片", file_count="multiple", interactive=False)
+                downloads = gr.File(label="下载 ZIP / 图片", file_count="multiple", interactive=False)
                 status = gr.HTML("<p>尚未运行自动打码。</p>")
 
         values = {

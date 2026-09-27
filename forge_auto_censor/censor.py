@@ -7,7 +7,6 @@ not require the anime model package.
 
 from __future__ import annotations
 
-import csv
 import re
 import threading
 import time
@@ -357,16 +356,16 @@ class CensorBatchResult:
     previews: list = field(default_factory=list)
     rows: list[dict] = field(default_factory=list)
     archive: Path | None = None
-    report: Path | None = None
     elapsed: float = 0
 
 
 def run_censor_batch(sources, destination, options, check_cancel=lambda: None,
                      progress=lambda *_: None, make_zip=True, detector=None):
     options.validate()
-    stamp = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
-    directory = Path(destination).resolve() / stamp
-    directory.mkdir(parents=True, exist_ok=False)
+    date_folder = time.strftime("%Y-%m-%d")
+    run_id = time.strftime("%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    directory = Path(destination).resolve() / date_folder
+    directory.mkdir(parents=True, exist_ok=True)
     result = CensorBatchResult(directory, len(sources))
     started = time.monotonic()
     detector = detector or build_detector(options.model_level)
@@ -376,7 +375,7 @@ def run_censor_batch(sources, destination, options, check_cancel=lambda: None,
             check_cancel()
             progress((index - 1) / len(sources), f"{index}/{len(sources)} · {source.name}")
             stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", source.stem).strip(" .")[:100] or "image"
-            output = directory / f"{index:05d}_{stem}{source.suffix.lower()}"
+            output = directory / f"{run_id}_{index:05d}_{stem}{source.suffix.lower()}"
             stats = process_still(source, output, detector, options, targets, check_cancel)
             result.outputs.append(output)
             result.completed += 1
@@ -397,16 +396,10 @@ def run_censor_batch(sources, destination, options, check_cancel=lambda: None,
             result.failed += 1
             result.rows.append({"输入文件": source.name, "状态": "失败", "错误": f"{type(exc).__name__}: {exc}"})
         progress(index / len(sources), f"已完成 {index}/{len(sources)}")
-    result.report = directory / "自动打码报告.csv"
-    fields = ["输入文件", "输出文件", "状态", "检测框", "错误"]
-    with result.report.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(result.rows)
     if make_zip and result.outputs:
-        result.archive = directory / "自动打码结果.zip"
+        result.archive = directory / f"{run_id}_自动打码结果.zip"
         with zipfile.ZipFile(result.archive, "x", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
-            for path in [*result.outputs, result.report]:
+            for path in result.outputs:
                 archive.write(path, arcname=path.name)
     result.elapsed = time.monotonic() - started
     return result

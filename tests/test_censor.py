@@ -1,8 +1,8 @@
-import csv
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -79,20 +79,37 @@ class CensorTests(unittest.TestCase):
             process_still(source, self.root / "output.gif", FakeDetector(), CensorOptions(),
                           ANIME_DEFAULT_TARGETS, lambda: None)
 
-    def test_batch_creates_report_zip_and_continues_after_bad_image(self):
+    def test_batch_uses_date_folder_without_csv_and_continues_after_bad_image(self):
         good = self.root / "good.png"
         Image.new("RGB", (32, 24), "red").save(good)
         bad = self.root / "bad.png"
         bad.write_bytes(b"not an image")
-        result = run_censor_batch([good, bad], self.root / "out", CensorOptions(shape="rect", dilate_px=0),
-                                  detector=FakeDetector())
+        with patch("forge_auto_censor.censor.time.strftime", side_effect=["2026-09-28", "120000"]):
+            result = run_censor_batch([good, bad], self.root / "out", CensorOptions(shape="rect", dilate_px=0),
+                                      detector=FakeDetector())
         self.assertEqual((result.completed, result.failed), (1, 1))
+        self.assertEqual(result.directory, (self.root / "out/2026-09-28").resolve())
+        self.assertEqual(len(result.rows), 2)
+        self.assertIn("UnidentifiedImageError", result.rows[1]["错误"])
         with zipfile.ZipFile(result.archive) as archive:
             self.assertIsNone(archive.testzip())
-            self.assertEqual(len(archive.namelist()), 2)
-        with result.report.open(encoding="utf-8-sig", newline="") as handle:
-            rows = list(csv.DictReader(handle))
-        self.assertEqual(len(rows), 2)
+            self.assertEqual(archive.namelist(), [path.name for path in result.outputs])
+        original_files = {path: path.read_bytes() for path in result.directory.iterdir()}
+        for day in ("2026-09-28", "2026-09-29"):
+            with self.subTest(day=day), patch("forge_auto_censor.censor.time.strftime", side_effect=[day, "120000"]):
+                repeated = run_censor_batch([good], self.root / "out", CensorOptions(),
+                                            make_zip=day == "2026-09-28", detector=FakeDetector())
+            self.assertEqual(repeated.directory, (self.root / "out" / day).resolve())
+            self.assertEqual(repeated.completed, 1)
+            self.assertTrue(set(repeated.outputs).isdisjoint(result.outputs))
+            if repeated.archive:
+                with zipfile.ZipFile(repeated.archive) as archive:
+                    self.assertEqual(archive.namelist(), [path.name for path in repeated.outputs])
+            else:
+                self.assertEqual(set(repeated.directory.iterdir()), set(repeated.outputs))
+        self.assertEqual(original_files, {path: path.read_bytes() for path in original_files})
+        self.assertFalse(list((self.root / "out").rglob("*.csv")))
+        self.assertTrue(all(path.is_file() for path in result.directory.iterdir()))
 
     def test_cancel_keeps_completed_images(self):
         paths = []
@@ -115,7 +132,7 @@ class CensorTests(unittest.TestCase):
         self.assertTrue(result.cancelled)
         self.assertEqual(result.completed, 1)
         self.assertTrue(result.outputs[0].exists())
-        self.assertTrue(result.report.exists())
+        self.assertTrue(result.archive.exists())
 
     def test_image_sort_excludes_output_and_rejects_disabled_directories(self):
         input_dir = self.root / "input"
