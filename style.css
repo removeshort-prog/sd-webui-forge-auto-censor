@@ -1,0 +1,5 @@
+.fiw-header { margin-bottom: 12px; }
+.fiw-report { overflow-x: auto; }
+.fiw-report table { border-collapse: collapse; width: 100%; }
+.fiw-report th, .fiw-report td { border: 1px solid var(--border-color-primary); padding: 6px; text-align: left; }
+.fiw-report code { word-break: break-all; }
