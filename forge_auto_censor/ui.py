@@ -76,7 +76,7 @@ def execute(values, session, first_only, progress):
     try:
         options = CensorOptions(
             extra_targets=tuple(values.get("targets") or []),
-            model_level=values["model_level"],
+            model_level=values.get("model_level", "s"),
             confidence=float(values["confidence"]), shape=values["shape"], mode=values["mode"],
             dilate_px=int(values["dilate"]), strength=int(values["strength"]),
             max_megapixels=float(values["max_megapixels"]),
