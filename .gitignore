@@ -1,3 +1,6 @@
 __pycache__/
 *.py[cod]
 .venv/
+models/*
+!models/.gitkeep
+!models/README.md

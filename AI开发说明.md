@@ -20,7 +20,7 @@ GitHub 对比后选择 `deepghs/imgutils`：MIT 许可证、持续维护，并�
 
 `dghs-imgutils 0.19.0` 是当前可用版本，但元数据声明 `numpy<2`。Forge Neo 使用 NumPy 2，因此安装器必须使用 `pip install --no-deps -r requirements-censor.txt`，再按文件补齐直接依赖。不要改回普通 `pip install -r`，也不要为了它降级 Forge 的 NumPy。
 
-模型文件由 Hugging Face Hub 按需下载。网络受限时使用 `HF_ENDPOINT=https://hf-mirror.com` 启动 Forge；不要把模型权重提交到仓库。
+模型文件由 Hugging Face Hub 按需下载，找到后复制到扩展自己的 `models/` 目录长期保存；不要把模型权重提交到仓库。网络受限时可设置 `HF_ENDPOINT=https://hf-mirror.com`，启动时插件会优先读取 `models/` 中的本地权重。
 
 ## Forge 规则
 

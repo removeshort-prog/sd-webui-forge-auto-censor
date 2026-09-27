@@ -30,7 +30,7 @@ $forge = "D:\A-forge neo\sd-webui-forge-neo"
 $env:HF_ENDPOINT = "https://hf-mirror.com"
 ```
 
-扩展会先检查 `censor_detect_v1.0_s/model.onnx` 是否已经在本机缓存。已缓存时会自动使用离线读取，不再因为 Hugging Face 的网络检查失败而报 `LocalEntryNotFoundError`。如果模型还没有下载，先关闭 Forge，在 Forge 根目录执行下面的命令（镜像不可用时可去掉 `HF_ENDPOINT`）：
+扩展会优先从本扩展的 `models/` 目录读取 `censor_detect_v1.0_s/model.onnx`。首次找到或下载模型后会复制到这里长期保存；模型权重不提交到 GitHub。已保存时会自动使用离线读取，不再因为 Hugging Face 的网络检查失败而报 `LocalEntryNotFoundError`。如果模型还没有下载，先关闭 Forge，在 Forge 根目录执行下面的命令（镜像不可用时可去掉 `HF_ENDPOINT`）：
 
 ```powershell
 $forge = "D:\A-forge neo\sd-webui-forge-neo"
@@ -39,7 +39,7 @@ $env:HF_HOME = "$env:USERPROFILE\.cache\huggingface"
 & "$forge\venv\Scripts\python.exe" -c "from huggingface_hub import hf_hub_download; print(hf_hub_download(repo_id='deepghs/anime_censor_detection', filename='censor_detect_v1.0_s/model.onnx'))"
 ```
 
-如果模型已经下载但 Forge 仍使用了错误的用户缓存目录，可在启动前固定目录：
+如果模型已经下载但插件目录尚未建立模型文件，重新打开一次 `[自动打码]` 会自动从当前用户 Hugging Face 缓存复制；也可以在启动前固定目录：
 
 ```powershell
 $env:HF_HOME = "C:\Users\cc9re\.cache\huggingface"

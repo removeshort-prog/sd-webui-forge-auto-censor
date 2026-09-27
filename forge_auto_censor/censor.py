@@ -1,18 +1,18 @@
 """Anime image censoring for the Forge Neo [自动打码] extension.
 
-The censor workflow deliberately handles still images only. Detection is
-optional and lazy so regular compression, watermark and upscaling features do
-not require the anime model package.
+The workflow handles still images only. Detection dependencies are imported
+when a task starts, so the Forge panel can load before they are installed.
 """
 
 from __future__ import annotations
 
+import ast
+import json
 import re
 import threading
 import time
 import uuid
 import zipfile
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,16 +21,11 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from .engine import Cancelled, check_pixels
+from .model_files import MODEL_LEVELS, ensure_model_file, model_name
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 ANIME_DEFAULT_TARGETS = ("penis", "pussy")
 ANIME_EXTRA_TARGETS = {"nipple_f": "乳头（二次元）"}
-MODEL_REPO = "deepghs/anime_censor_detection"
-MODEL_LEVELS = {
-    "s": "标准模型（精度优先）",
-    "n": "轻量模型（速度优先）",
-}
-_HUB_MODE_LOCK = threading.Lock()
 
 
 @dataclass
@@ -67,83 +62,40 @@ def _dependency_error():
     )
 
 
-def _model_is_cached(model_name):
-    """Return whether the default anime detector is already in the HF cache.
-
-    ``huggingface_hub`` normally performs a network HEAD request even when the
-    requested snapshot is present locally.  That is particularly painful in
-    Forge installations where the Hub is blocked or temporarily unavailable.
-    The local-only probe is cheap and never starts a download.
-    """
-    try:
-        from huggingface_hub import hf_hub_download
-
-        hf_hub_download(
-            repo_id=MODEL_REPO,
-            repo_type="model",
-            filename=f"{model_name}/model.onnx",
-            revision="main",
-            local_files_only=True,
-        )
-        return True
-    except (ImportError, OSError, ValueError):
-        return False
-
-
-@contextmanager
-def _hub_offline_for_cached_model():
-    """Temporarily make Hugging Face Hub reads use the local cache only."""
-    try:
-        from huggingface_hub import constants
-    except ImportError:
-        yield
-        return
-
-    previous = constants.HF_HUB_OFFLINE
-    constants.HF_HUB_OFFLINE = True
-    try:
-        yield
-    finally:
-        constants.HF_HUB_OFFLINE = previous
-
-
 class AnimeDetector:
     def __init__(self, model_level="s"):
-        if model_level not in MODEL_LEVELS:
-            raise ValueError("二次元检测模型无效，请选择标准模型或轻量模型")
+        self.model_name = model_name(model_level)
         try:
-            from imgutils.detect import detect_censors
+            from imgutils.data import rgb_encode
+            from imgutils.generic.yolo import _image_preprocess, _yolo_postprocess
+            from imgutils.utils import open_onnx_model
         except ImportError as exc:
             raise _dependency_error() from exc
-        self.detect_censors = detect_censors
-        self.model_level = model_level
-        self.model_name = f"censor_detect_v1.0_{model_level}"
-        self.model_cached = _model_is_cached(self.model_name)
+        self.model_path = ensure_model_file(model_level)
+        # Open the ONNX path directly. No Hub listing, metadata lookup or global
+        # cache/offline setting is involved in inference.
+        self.model = open_onnx_model(str(self.model_path))
+        metadata = self.model.get_modelmeta().custom_metadata_map
+        self.infer_size = tuple(json.loads(metadata["imgsz"])) if "imgsz" in metadata else 640
+        names = ast.literal_eval(metadata["names"])
+        self.labels = [names[index] for index in range(len(names))]
+        if not set(ANIME_DEFAULT_TARGETS).issubset(self.labels):
+            raise ValueError(f"模型类别不匹配，请使用二次元打码模型：{self.model_path}")
+        self._preprocess = _image_preprocess
+        self._encode = rgb_encode
+        self._postprocess = _yolo_postprocess
+        self._run_lock = threading.Lock()
 
     def detect(self, image_bgr, targets, confidence):
-        rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-        try:
-            # A cached model should not trigger a network HEAD request.  Keep
-            # the setting scoped to this call so Forge's other extensions can
-            # still access the network normally.
-            if self.model_cached:
-                with _HUB_MODE_LOCK, _hub_offline_for_cached_model():
-                    results = self.detect_censors(
-                        Image.fromarray(rgb), level=self.model_level, conf_threshold=confidence
-                    )
-            else:
-                results = self.detect_censors(
-                    Image.fromarray(rgb), level=self.model_level, conf_threshold=confidence
-                )
-        except Exception as exc:
-            error_name = type(exc).__name__
-            if "LocalEntryNotFoundError" in error_name or "OfflineModeIsEnabled" in error_name:
-                raise RuntimeError(
-                    f"找不到二次元检测模型 {self.model_name}。请联网运行一次，或先设置 "
-                    "HF_ENDPOINT=https://hf-mirror.com 下载模型；若模型已下载，请确认 Forge 与 "
-                    "当前用户使用同一个 Hugging Face 缓存目录。"
-                ) from exc
-            raise
+        image = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+        resized, old_size, new_size = self._preprocess(image, self.infer_size, allow_dynamic=False)
+        data = self._encode(resized)[None, ...]
+        with self._run_lock:
+            output, = self.model.run(["output0"], {"images": data})
+        results = self._postprocess(
+            output=output[0], conf_threshold=confidence, iou_threshold=0.7,
+            old_size=old_size, new_size=new_size, labels=self.labels,
+        )
         return [
             (int(x0), int(y0), int(x1), int(y1))
             for (x0, y0, x1, y1), label, score in results

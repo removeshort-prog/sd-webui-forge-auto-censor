@@ -148,7 +148,7 @@ def create_ui():
                 model_level = gr.Dropdown(
                     [(label, code) for code, label in MODEL_LEVELS.items()],
                     value="s", label="二次元检测模型",
-                    info="标准模型精度更高；轻量模型占用更低、速度更快。未缓存的模型首次使用会联网下载。",
+                    info="模型保存在本扩展的 models 文件夹。已有模型直接读取，缺失时才下载。",
                 )
                 confidence = gr.Slider(0.01, 0.99, value=0.25, step=0.01, label="置信度阈值")
                 targets = gr.CheckboxGroup(
