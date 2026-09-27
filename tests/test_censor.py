@@ -41,6 +41,11 @@ class CensorTests(unittest.TestCase):
         options = CensorOptions(extra_targets=("nipple_f", "real_only"))
         self.assertEqual(targets_for(options), [*ANIME_DEFAULT_TARGETS, "nipple_f"])
 
+    def test_detector_model_selection_is_validated(self):
+        self.assertEqual(CensorOptions(model_level="n").model_level, "n")
+        with self.assertRaisesRegex(ValueError, "检测模型无效"):
+            CensorOptions(model_level="missing").validate()
+
     def test_mask_shapes_only_change_masked_pixels(self):
         image = np.zeros((40, 50, 3), dtype=np.uint8)
         image[:, :, 0] = np.arange(50, dtype=np.uint8)

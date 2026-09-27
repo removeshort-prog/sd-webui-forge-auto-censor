@@ -5,6 +5,7 @@
 ## 功能
 
 - 使用 `dghs-imgutils` 检测二次元图片中的 `penis`、`pussy`，可选 `nipple_f`。
+- 提供标准 `s` 和轻量 `n` 两种二次元检测模型，可在页签中切换；未缓存的模型首次使用时下载。
 - 支持 PNG、WebP、JPEG、BMP、TIFF，保留 PNG/WebP/TIFF 的透明 Alpha。
 - 支持 GrabCut 贴合轮廓、椭圆、矩形遮罩。
 - 支持马赛克和高斯模糊，支持扩边缘、置信度和像素上限。
@@ -45,9 +46,17 @@ $env:HF_HOME = "C:\Users\cc9re\.cache\huggingface"
 $env:HF_HUB_CACHE = "$env:HF_HOME\hub"
 ```
 
+`webui-user.bat` 必须在 Forge 根目录启动，否则它找不到旁边的 `webui.bat`。PowerShell 请这样启动（变量名中的下划线前不要加反斜杠）：
+
+```powershell
+Push-Location $forge
+& ".\webui-user.bat"
+Pop-Location
+```
+
 ## 使用
 
-打开 Forge Neo 的 **[自动打码]** 页签，上传图片或选择图片文件夹，先点击“试处理首张图片”，确认遮罩后再批量处理。结果会保存到 `Forge/outputs/auto-censor/` 的独立任务目录。
+打开 Forge Neo 的 **[自动打码]** 页签，选择检测模型，上传图片或选择图片文件夹，先点击“试处理首张图片”，确认遮罩后再批量处理。结果会保存到 `Forge/outputs/auto-censor/` 的独立任务目录。
 
 ## 测试
 

@@ -8,7 +8,7 @@ from pathlib import Path
 import gradio as gr
 from modules import call_queue, shared
 
-from .censor import ANIME_EXTRA_TARGETS, IMAGE_EXTENSIONS, CensorOptions, media_sources, run_censor_batch
+from .censor import ANIME_EXTRA_TARGETS, IMAGE_EXTENSIONS, MODEL_LEVELS, CensorOptions, media_sources, run_censor_batch
 from .engine import Cancelled
 
 _jobs = {}
@@ -76,6 +76,7 @@ def execute(values, session, first_only, progress):
     try:
         options = CensorOptions(
             extra_targets=tuple(values.get("targets") or []),
+            model_level=values["model_level"],
             confidence=float(values["confidence"]), shape=values["shape"], mode=values["mode"],
             dilate_px=int(values["dilate"]), strength=int(values["strength"]),
             max_megapixels=float(values["max_megapixels"]),
@@ -144,6 +145,11 @@ def create_ui():
                 sort = gr.Dropdown(
                     ["路径自然排序", "文件名自然排序", "修改时间从旧到新", "修改时间从新到旧"],
                     value="路径自然排序", label="处理顺序")
+                model_level = gr.Dropdown(
+                    [(label, code) for code, label in MODEL_LEVELS.items()],
+                    value="s", label="二次元检测模型",
+                    info="标准模型精度更高；轻量模型占用更低、速度更快。未缓存的模型首次使用会联网下载。",
+                )
                 confidence = gr.Slider(0.01, 0.99, value=0.25, step=0.01, label="置信度阈值")
                 targets = gr.CheckboxGroup(
                     [(label, code) for code, label in ANIME_EXTRA_TARGETS.items()],
@@ -176,7 +182,8 @@ def create_ui():
 
         values = {
             "input_mode": input_mode, "uploads": uploads, "input_dir": input_dir,
-            "recursive": recursive, "sort": sort, "confidence": confidence, "targets": targets,
+            "recursive": recursive, "sort": sort, "model_level": model_level,
+            "confidence": confidence, "targets": targets,
             "shape": shape, "mode": mode, "dilate": dilate, "strength": strength,
             "output_dir": output_dir, "make_zip": make_zip, "max_megapixels": max_megapixels,
         }

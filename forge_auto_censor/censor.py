@@ -27,13 +27,17 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 ANIME_DEFAULT_TARGETS = ("penis", "pussy")
 ANIME_EXTRA_TARGETS = {"nipple_f": "乳头（二次元）"}
 MODEL_REPO = "deepghs/anime_censor_detection"
-MODEL_NAME = "censor_detect_v1.0_s"
+MODEL_LEVELS = {
+    "s": "标准模型（精度优先）",
+    "n": "轻量模型（速度优先）",
+}
 _HUB_MODE_LOCK = threading.Lock()
 
 
 @dataclass
 class CensorOptions:
     extra_targets: tuple[str, ...] = ()
+    model_level: str = "s"
     confidence: float = 0.25
     shape: str = "fit"
     mode: str = "mosaic"
@@ -42,6 +46,8 @@ class CensorOptions:
     max_megapixels: float = 64
 
     def validate(self):
+        if self.model_level not in MODEL_LEVELS:
+            raise ValueError("二次元检测模型无效，请选择标准模型或轻量模型")
         if not 0.01 <= float(self.confidence) <= 0.99:
             raise ValueError("置信度阈值必须在 0.01～0.99 之间")
         if self.shape not in ("fit", "ellipse", "rect"):
@@ -62,7 +68,7 @@ def _dependency_error():
     )
 
 
-def _model_is_cached():
+def _model_is_cached(model_name):
     """Return whether the default anime detector is already in the HF cache.
 
     ``huggingface_hub`` normally performs a network HEAD request even when the
@@ -76,7 +82,7 @@ def _model_is_cached():
         hf_hub_download(
             repo_id=MODEL_REPO,
             repo_type="model",
-            filename=f"{MODEL_NAME}/model.onnx",
+            filename=f"{model_name}/model.onnx",
             revision="main",
             local_files_only=True,
         )
@@ -103,13 +109,17 @@ def _hub_offline_for_cached_model():
 
 
 class AnimeDetector:
-    def __init__(self):
+    def __init__(self, model_level="s"):
+        if model_level not in MODEL_LEVELS:
+            raise ValueError("二次元检测模型无效，请选择标准模型或轻量模型")
         try:
             from imgutils.detect import detect_censors
         except ImportError as exc:
             raise _dependency_error() from exc
         self.detect_censors = detect_censors
-        self.model_cached = _model_is_cached()
+        self.model_level = model_level
+        self.model_name = f"censor_detect_v1.0_{model_level}"
+        self.model_cached = _model_is_cached(self.model_name)
 
     def detect(self, image_bgr, targets, confidence):
         rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
@@ -119,14 +129,18 @@ class AnimeDetector:
             # still access the network normally.
             if self.model_cached:
                 with _HUB_MODE_LOCK, _hub_offline_for_cached_model():
-                    results = self.detect_censors(Image.fromarray(rgb), conf_threshold=confidence)
+                    results = self.detect_censors(
+                        Image.fromarray(rgb), level=self.model_level, conf_threshold=confidence
+                    )
             else:
-                results = self.detect_censors(Image.fromarray(rgb), conf_threshold=confidence)
+                results = self.detect_censors(
+                    Image.fromarray(rgb), level=self.model_level, conf_threshold=confidence
+                )
         except Exception as exc:
             error_name = type(exc).__name__
             if "LocalEntryNotFoundError" in error_name or "OfflineModeIsEnabled" in error_name:
                 raise RuntimeError(
-                    "找不到二次元检测模型。请联网运行一次，或先设置 "
+                    f"找不到二次元检测模型 {self.model_name}。请联网运行一次，或先设置 "
                     "HF_ENDPOINT=https://hf-mirror.com 下载模型；若模型已下载，请确认 Forge 与 "
                     "当前用户使用同一个 Hugging Face 缓存目录。"
                 ) from exc
@@ -138,8 +152,8 @@ class AnimeDetector:
         ]
 
 
-def build_detector():
-    return AnimeDetector()
+def build_detector(model_level="s"):
+    return AnimeDetector(model_level)
 
 
 def targets_for(options: CensorOptions):
@@ -355,7 +369,7 @@ def run_censor_batch(sources, destination, options, check_cancel=lambda: None,
     directory.mkdir(parents=True, exist_ok=False)
     result = CensorBatchResult(directory, len(sources))
     started = time.monotonic()
-    detector = detector or build_detector()
+    detector = detector or build_detector(options.model_level)
     targets = targets_for(options)
     for index, source in enumerate(sources, 1):
         try:
