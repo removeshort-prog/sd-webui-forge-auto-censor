@@ -2,6 +2,9 @@
 
 这是一个独立的 SD WebUI Forge Neo 扩展，专门处理二次元静态图片自动打码。图片压缩、水印和透明图超分仍由 [图片工坊](https://github.com/removeshort-prog/sd-webui-forge-neo-image-workshop) 负责。
 
+<img width="2193" height="1351" alt="image" src="https://github.com/user-attachments/assets/803e329f-6b10-467f-8255-ba2ffacdd23d" />
+
+
 ## 功能
 
 - 使用 `dghs-imgutils` 检测二次元图片中的 `penis`、`pussy`，可选 `nipple_f`。
